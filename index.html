@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b5e20">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Árboles UNSM">
+<link rel="manifest" href="manifest.json">
+<title>Árboles UNSM</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--g:#1b5e20;--g2:#2e7d32;--bg:#fff;--tx:#1c1c1c;--mu:#666;--sa-t:env(safe-area-inset-top,0px);--sa-b:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--tx);background:#222;overscroll-behavior:none}
+#map{position:fixed;inset:0}
+.leaflet-top{top:calc(var(--sa-t) + 64px)}
+.leaflet-bottom{bottom:calc(var(--sa-b) + 76px)}
+.leaflet-control-zoom{display:none}
+
+/* Barra superior */
+#top{position:fixed;top:calc(var(--sa-t) + 8px);left:10px;right:10px;z-index:900;background:var(--g);color:#fff;border-radius:16px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 3px 12px #0006}
+#top b{font-size:16px}
+#who{font-size:13px;opacity:.9}
+
+/* Navegación inferior */
+#nav{position:fixed;left:0;right:0;bottom:0;z-index:900;background:var(--bg);display:flex;justify-content:space-around;align-items:flex-end;padding:6px 6px calc(var(--sa-b) + 6px);box-shadow:0 -2px 12px #0004;border-radius:18px 18px 0 0}
+#nav button{background:none;border:0;color:var(--mu);font:inherit;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:64px;min-height:48px;padding:4px}
+#nav button span{font-size:22px;line-height:1}
+#nav .fab{background:var(--g2);color:#fff;border-radius:50%;width:58px;height:58px;min-width:58px;margin-top:-26px;box-shadow:0 4px 12px #0006;justify-content:center}
+#nav .fab span{font-size:28px}
+
+/* Sheets */
+#bd{position:fixed;inset:0;background:#0007;z-index:1000;display:none}
+#bd.on{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:1001;background:var(--bg);border-radius:20px 20px 0 0;padding:8px 16px calc(var(--sa-b) + 18px);max-height:88dvh;overflow:auto;transform:translateY(105%);transition:transform .25s ease;max-width:560px;margin:0 auto;-webkit-overflow-scrolling:touch}
+.sheet.on{transform:none}
+.sheet::before{content:"";display:block;width:42px;height:4px;border-radius:2px;background:#ccc;margin:4px auto 12px}
+.sheet h2{margin:0 0 10px;font-size:20px}
+label{font-size:13px;color:var(--mu)}
+input,textarea{width:100%;padding:12px;margin:4px 0 12px;border:1px solid #bbb;border-radius:10px;font:inherit;font-size:16px;background:#fff;color:var(--tx)}
+.btn{background:var(--g2);color:#fff;border:0;padding:13px 16px;border-radius:12px;font:inherit;font-weight:600;min-height:46px;cursor:pointer}
+.btn.sec{background:#e8f5e9;color:var(--g)}
+.btn.red{background:#c62828}
+.btn.full{width:100%}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>.btn{flex:1}
+.item{display:flex;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid #eee}
+.item .ic{font-size:26px}
+.item small{color:var(--mu);display:block}
+#qrOut{text-align:center;margin:14px 0}
+#qrOut img{margin:auto}
+#hint{position:fixed;top:calc(var(--sa-t) + 8px);left:10px;right:10px;z-index:1100;background:#ff6f00;color:#fff;border-radius:16px;padding:12px 14px;display:none;justify-content:space-between;align-items:center;font-weight:600}
+#hint button{background:#fff;color:#ff6f00;border:0;border-radius:10px;padding:8px 12px;font-weight:700}
+.muted{font-size:12px;color:var(--mu)}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="top"><b>🌳 Árboles UNSM</b><span id="who"></span></div>
+<div id="hint"><span>Toca el mapa donde está el árbol</span><button onclick="cancelPick()">Cancelar</button></div>
+
+<nav id="nav">
+  <button onclick="showList()"><span>🌳</span>Especies</button>
+  <button onclick="toggleGps()"><span>📍</span>Mi ubicación</button>
+  <button class="fab" onclick="startAdd()" aria-label="Agregar"><span>＋</span></button>
+  <button onclick="showAccount()"><span>👤</span><i id="navAcc" style="font-style:normal">Cuenta</i></button>
+</nav>
+
+<div id="bd" onclick="closeSheets()"></div>
+
+<!-- Cuenta / Login -->
+<div class="sheet" id="sLogin">
+  <h2>Estudiantes</h2>
+  <label>Nombre</label><input id="lName" autocomplete="name">
+  <label>Código / correo</label><input id="lId" autocomplete="username" autocapitalize="none">
+  <label>Contraseña</label><input id="lPass" type="password" autocomplete="current-password">
+  <div class="row"><button class="btn" onclick="doLogin()">Entrar</button><button class="btn sec" onclick="doRegister()">Crear cuenta</button></div>
+  <p class="muted">Sin iniciar sesión solo puedes ver el mapa y escanear QR.</p>
+</div>
+<div class="sheet" id="sAcc"></div>
+
+<!-- Formulario -->
+<div class="sheet" id="sForm">
+  <h2>Registrar especie</h2>
+  <label>Nombre común</label><input id="fName">
+  <label>Nombre científico</label><input id="fSci" autocapitalize="none">
+  <label>Descripción</label><textarea id="fDesc" rows="3"></textarea>
+  <label>PDF de la especie (máx. 2 MB)</label><input id="fPdf" type="file" accept="application/pdf">
+  <button class="btn sec full" onclick="pickLocation()">📍 Marcar ubicación en el mapa</button>
+  <p class="muted" id="fLoc">Sin ubicación</p>
+  <div class="row"><button class="btn" onclick="saveSpecies()">Guardar y generar QR</button><button class="btn sec" onclick="closeSheets()">Cancelar</button></div>
+</div>
+
+<!-- Lista -->
+<div class="sheet" id="sList">
+  <h2>Especies registradas</h2>
+  <input id="q" placeholder="Buscar por nombre…" oninput="renderList()">
+  <div id="listOut"></div>
+</div>
+
+<!-- Detalle -->
+<div class="sheet" id="sView"></div>
+
+<script>
+// ====== Capa de datos (aquí luego se cambia por Supabase) ======
+const DB={
+  get(k){try{return JSON.parse(localStorage.getItem(k))||[]}catch(e){return[]}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){alert('Sin espacio: el PDF es muy pesado')}}
+};
+let user=JSON.parse(sessionStorage.getItem('user')||'null');
+let species=DB.get('species');
+let pendingLoc=null,picking=false,tempMarker=null;
+const $=id=>document.getElementById(id);
+const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ====== Mapa ======
+const map=L.map('map',{zoomControl:false}).setView([-6.4955,-76.3625],17); // ajusta al centro exacto de la UNSM
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'}).addTo(map);
+const layer=L.layerGroup().addTo(map);
+function drawMarkers(){
+  layer.clearLayers();
+  species.forEach(s=>L.marker([s.lat,s.lng]).addTo(layer).bindTooltip(s.name).on('click',()=>showSpecies(s.id)));
+}
+map.on('click',e=>{
+  if(!picking)return;
+  pendingLoc=e.latlng;picking=false;$('hint').style.display='none';
+  if(tempMarker)map.removeLayer(tempMarker);
+  tempMarker=L.marker(e.latlng).addTo(map);
+  $('fLoc').textContent='📍 '+e.latlng.lat.toFixed(5)+', '+e.latlng.lng.toFixed(5);
+  openSheet('sForm');
+});
+
+// ====== Sheets ======
+function openSheet(id){
+  document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('on'));
+  $(id).classList.add('on');$('bd').classList.add('on');
+}
+function closeSheets(){
+  document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('on'));
+  $('bd').classList.remove('on');
+  if(location.hash)history.replaceState(null,'',location.pathname);
+}
+function refreshHeader(){
+  $('who').textContent=user?'👤 '+user.name.split(' ')[0]:'Visitante';
+  $('navAcc').textContent=user?'Cuenta':'Entrar';
+}
+
+// ====== Cuenta (demo) ======
+async function hash(t){
+  const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));
+  return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function doRegister(){
+  const name=$('lName').value.trim(),id=$('lId').value.trim(),pass=$('lPass').value;
+  if(!name||!id||pass.length<4)return alert('Completa todo (contraseña mín. 4)');
+  const users=DB.get('users');
+  if(users.find(u=>u.id===id))return alert('Ese código ya existe');
+  users.push({name,id,pass:await hash(pass)});DB.set('users',users);
+  alert('Cuenta creada, ahora entra');
+}
+async function doLogin(){
+  const id=$('lId').value.trim(),p=await hash($('lPass').value);
+  const u=DB.get('users').find(u=>u.id===id&&u.pass===p);
+  if(!u)return alert('Datos incorrectos');
+  user={name:u.name,id:u.id};sessionStorage.setItem('user',JSON.stringify(user));
+  refreshHeader();closeSheets();
+}
+function showAccount(){
+  if(!user)return openSheet('sLogin');
+  $('sAcc').innerHTML=`<h2>👤 ${esc(user.name)}</h2><p class="muted">Código: ${esc(user.id)}<br>Mis especies: ${species.filter(s=>s.owner===user.id).length}</p>
+  <button class="btn red full" onclick="logout()">Cerrar sesión</button>`;
+  openSheet('sAcc');
+}
+function logout(){user=null;sessionStorage.removeItem('user');refreshHeader();closeSheets()}
+
+// ====== Registrar ======
+function startAdd(){
+  if(!user){alert('Inicia sesión para registrar especies');return openSheet('sLogin')}
+  pendingLoc=null;$('fLoc').textContent='Sin ubicación';
+  ['fName','fSci','fDesc','fPdf'].forEach(i=>$(i).value='');
+  openSheet('sForm');
+}
+function pickLocation(){
+  document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('on'));
+  $('bd').classList.remove('on');picking=true;$('hint').style.display='flex';
+}
+function cancelPick(){picking=false;$('hint').style.display='none';openSheet('sForm')}
+function saveSpecies(){
+  const f=$('fPdf').files[0];
+  if(!$('fName').value.trim()||!pendingLoc||!f)return alert('Falta nombre, ubicación o PDF');
+  if(f.size>2*1024*1024)return alert('PDF mayor a 2 MB');
+  const r=new FileReader();
+  r.onload=()=>{
+    const s={id:Date.now().toString(36),name:$('fName').value.trim(),sci:$('fSci').value.trim(),desc:$('fDesc').value.trim(),
+      pdf:r.result,lat:pendingLoc.lat,lng:pendingLoc.lng,owner:user.id,ownerName:user.name};
+    species.push(s);DB.set('species',species);
+    if(tempMarker){map.removeLayer(tempMarker);tempMarker=null}
+    drawMarkers();showSpecies(s.id);
+  };
+  r.readAsDataURL(f);
+}
+
+// ====== Lista ======
+function showList(){$('q').value='';renderList();openSheet('sList')}
+function renderList(){
+  const q=$('q').value.toLowerCase();
+  const l=species.filter(s=>(s.name+' '+s.sci).toLowerCase().includes(q));
+  $('listOut').innerHTML=l.length?l.map(s=>`<div class="item" onclick="showSpecies('${s.id}')"><span class="ic">🌳</span><div><b>${esc(s.name)}</b><small><i>${esc(s.sci)}</i></small></div></div>`).join(''):'<p class="muted">Aún no hay especies.</p>';
+}
+
+// ====== Detalle + QR ======
+const speciesUrl=id=>location.origin+location.pathname+'#sp='+id;
+function showSpecies(id){
+  const s=species.find(x=>x.id===id);if(!s)return;
+  const mine=user&&user.id===s.owner;
+  $('sView').innerHTML=`<h2>${esc(s.name)}</h2><p><i>${esc(s.sci)}</i></p><p>${esc(s.desc)}</p>
+    <p class="muted">Registrado por ${esc(s.ownerName)}</p>
+    <a id="pdfLink" target="_blank" rel="noopener"><button class="btn full">📄 Ver PDF</button></a>
+    <div id="qrOut"></div>
+    <div class="row"><button class="btn sec" id="dlQr">⬇ Descargar QR</button>${mine?'<button class="btn red" id="delBtn">Eliminar</button>':''}</div>`;
+  fetch(s.pdf).then(r=>r.blob()).then(b=>$('pdfLink').href=URL.createObjectURL(b));
+  new QRCode($('qrOut'),{text:speciesUrl(id),width:200,height:200});
+  $('dlQr').onclick=()=>{
+    const c=document.querySelector('#qrOut canvas');
+    const a=document.createElement('a');a.href=c.toDataURL('image/png');
+    a.download='QR-'+s.name.replace(/\s+/g,'_')+'.png';a.click();
+  };
+  if(mine)$('delBtn').onclick=()=>{
+    if(!confirm('¿Eliminar esta especie?'))return;
+    species=species.filter(x=>x.id!==id);DB.set('species',species);drawMarkers();closeSheets();
+  };
+  map.setView([s.lat,s.lng],19);
+  openSheet('sView');
+}
+
+// ====== GPS ======
+let gpsDot=null,gpsAcc=null,gpsWatch=null;
+function toggleGps(){
+  if(!navigator.geolocation)return alert('Tu navegador no soporta GPS');
+  if(gpsWatch!==null){if(gpsDot)map.setView(gpsDot.getLatLng(),19);return}
+  gpsWatch=navigator.geolocation.watchPosition(p=>{
+    const ll=[p.coords.latitude,p.coords.longitude];
+    if(!gpsDot){
+      gpsDot=L.circleMarker(ll,{radius:8,color:'#fff',weight:3,fillColor:'#1976d2',fillOpacity:1}).addTo(map).bindTooltip('Estás aquí');
+      gpsAcc=L.circle(ll,{radius:p.coords.accuracy,color:'#1976d2',weight:1,fillOpacity:.1}).addTo(map);
+      map.setView(ll,19);
+    }else{gpsDot.setLatLng(ll);gpsAcc.setLatLng(ll).setRadius(p.coords.accuracy)}
+  },()=>{gpsWatch=null;alert('No se pudo obtener tu ubicación. Activa el GPS y da permiso al navegador.')},
+  {enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+}
+
+// ====== Inicio ======
+refreshHeader();drawMarkers();
+const m=location.hash.match(/sp=(\w+)/);
+if(m)showSpecies(m[1]);
+</script>
+</body>
+</html>
